@@ -1,0 +1,6 @@
+# nix
+.direnv/
+
+# build artifacts
+.gradle/
+build/
