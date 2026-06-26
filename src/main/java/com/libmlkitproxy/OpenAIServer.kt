@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import kotlin.math.min
 
 class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0.1", port) {
     private val TAG = "LibMLKitProxy"
@@ -129,8 +130,13 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
         Log.d(TAG, "Final context: $finalContext")
 
         // Passthru generation parameters
-        val maxTokensOpt = requestJson.optInt("max_tokens", 0)
-        val temperatureOpt = requestJson.optDouble("temperature", -1.0)
+        var maxTokensOpt = requestJson.optInt("max_tokens", 256)
+        val temperatureOpt = requestJson.optDouble("temperature", 0.0)
+
+        // Clamp output tokens due to limited context window
+        maxTokensOpt = min(maxTokensOpt, 256)
+
+        Log.i(TAG, "Preparing GenerateContentRequest for MLKit...")
 
         // Build the request using the exact Beta 2 DSL signatures
         val request = if (parsedBitmap != null) {
