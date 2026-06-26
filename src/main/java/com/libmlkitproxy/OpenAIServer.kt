@@ -197,7 +197,10 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
                     })
                 }
 
-                newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
+                // Log the final JSON response
+                Log.d(TAG, "Full JSON response: $responseJson")
+
+                return@runBlocking newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
             } catch (e: Exception) {
                 handleException(e)
             } finally {
