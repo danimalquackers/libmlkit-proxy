@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Log
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.ImagePart
@@ -16,8 +17,12 @@ import org.json.JSONObject
 import java.util.UUID
 
 class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0.1", port) {
+    private val TAG = "LibMLKitProxy"
+
     override fun serve(session: IHTTPSession): Response {
         return try {
+            Log.i(TAG, "Request to ${session.uri}")
+
             when (session.uri) {
                 // TODO Add support for transcriptions
                 "/v1/models" -> if (session.method == Method.GET) handleModels() else methodNotAllowed()
@@ -97,12 +102,16 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
 
                                 // Save the image, overwriting any previous images if needed
                                 parsedBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+
+                                Log.i(TAG, "Attaching bitmap to prompt")
                             } catch (e: Exception) {
                                 return badRequest("Failed to decode base64 image_url")
                             }
                         }
                     } else if (type == "text") {
                         textContent += part.optString("text") + "\n"
+                    } else {
+                        Log.w(TAG, "Unsupported content type: $type")
                     }
                 }
             }
@@ -116,6 +125,8 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
         // Append the assistant role to continue generation
         promptBuilder.append("ASSISTANT: ")
         val finalContext = promptBuilder.toString()
+
+        Log.d(TAG, "Final context: $finalContext")
 
         // Passthru generation parameters
         val maxTokensOpt = requestJson.optInt("max_tokens", 0)
@@ -150,10 +161,12 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
                 }
 
                 // Execute inferencing
+                Log.i(TAG, "Generating content response...")
                 val result = generativeModel.generateContent(request)
 
                 // Extract text from the Candidate list
                 val generatedText = result.candidates.firstOrNull()?.text ?: ""
+                Log.d(TAG, "Generated text: $generatedText")
 
                 val responseJson = JSONObject().apply {
                     put("id", "mlkit-${UUID.randomUUID()}")
@@ -189,6 +202,8 @@ class OpenAIServer(private val context: Context, port: Int) : NanoHTTPD("127.0.0
     }
 
     private fun handleException(e: Exception): Response {
+        Log.e(TAG, "Error generating content", e)
+
         if (e is GenAiException) {
             val (status, type, message) = when (e.errorCode) {
                 GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED -> 

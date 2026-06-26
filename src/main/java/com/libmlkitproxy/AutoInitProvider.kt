@@ -50,7 +50,11 @@ class AutoInitProvider : ContentProvider() {
                                 is DownloadStatus.DownloadProgress -> {
                                     val bytes = downloadStatus.totalBytesDownloaded;
 
-                                    Log.i(TAG, "Download progress: ${bytes/totalBytes}%")
+                                    if (totalBytes > 0) {
+                                        Log.i(TAG, "Download progress: ${bytes/totalBytes}%")
+                                    } else {
+                                        Log.i(TAG, "Download progress: $bytes bytes")
+                                    }
                                 }
                                 is DownloadStatus.DownloadCompleted -> {
                                     Log.i(TAG, "Download finished. Starting server...")
@@ -101,7 +105,7 @@ class AutoInitProvider : ContentProvider() {
         try {
             server?.start()
 
-            Log.i(TAG, "Proxy server for $packageName started dynamically on port $port")
+            Log.i(TAG, "Proxy server for $packageName started on port $port")
             showToast(ctx, "Listening on :$port")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start proxy server on port $port", e)
