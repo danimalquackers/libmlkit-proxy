@@ -9,22 +9,23 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import com.libmlkitproxy.api.MLKitProxyInterface
 import com.google.mlkit.common.MlKit
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
+import com.libmlkitproxy.api.MlKitProxyInterface
 import kotlinx.coroutines.*
 import kotlin.math.abs
 
-class MLKitProxy : MLKitProxyInterface {
+class MLKitProxy : MlKitProxyInterface {
     private var server: OpenAIServer? = null
     private val TAG = "LibMLKitProxy"
 
-    private val exceptionHandler = CoroutineExceptionHandler { _, exception ->
-        Log.e(TAG, "Uncaught exception in proxy coroutine scope", exception)
-    }
+    private val exceptionHandler =
+        CoroutineExceptionHandler { _, exception ->
+            Log.e(TAG, "Uncaught exception in proxy coroutine scope", exception)
+        }
 
     // Create a background scope for the suspend functions
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
@@ -33,7 +34,8 @@ class MLKitProxy : MLKitProxyInterface {
         init {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                 try {
-                    org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions("")
+                    org.lsposed.hiddenapibypass.HiddenApiBypass
+                        .addHiddenApiExemptions("")
                     Log.i("LibMLKitProxy", "Successfully exempted hidden APIs process-wide in static initializer")
                 } catch (e: Throwable) {
                     Log.e("LibMLKitProxy", "Failed to exempt hidden APIs in static initializer", e)
@@ -71,7 +73,7 @@ class MLKitProxy : MLKitProxyInterface {
                 if (status == FeatureStatus.DOWNLOADABLE) {
                     Log.w(TAG, "ML Kit Model downloadable. Initiating background download...")
                     showToast(context, "Downloading AI model in background...")
-                    
+
                     generativeModel.download().collect { downloadStatus ->
                         var totalBytes = 0L
                         when (downloadStatus) {
@@ -79,10 +81,10 @@ class MLKitProxy : MLKitProxyInterface {
                                 totalBytes = downloadStatus.bytesToDownload
                             }
                             is DownloadStatus.DownloadProgress -> {
-                                val bytes = downloadStatus.totalBytesDownloaded;
+                                val bytes = downloadStatus.totalBytesDownloaded
 
                                 if (totalBytes > 0) {
-                                    Log.i(TAG, "Download progress: ${bytes/totalBytes}%")
+                                    Log.i(TAG, "Download progress: ${bytes / totalBytes}%")
                                 } else {
                                     Log.i(TAG, "Download progress: $bytes bytes")
                                 }
@@ -129,7 +131,10 @@ class MLKitProxy : MLKitProxyInterface {
         }
     }
 
-    private fun startServer(context: android.content.Context, packageName: String) {
+    private fun startServer(
+        context: android.content.Context,
+        packageName: String,
+    ) {
         val port = calculateDeterministicPort(packageName)
         server = OpenAIServer(port)
 
@@ -144,7 +149,10 @@ class MLKitProxy : MLKitProxyInterface {
         }
     }
 
-    private fun showToast(context: android.content.Context, message: String) {
+    private fun showToast(
+        context: android.content.Context,
+        message: String,
+    ) {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, "libmlkit-proxy: $message", Toast.LENGTH_LONG).show()
         }

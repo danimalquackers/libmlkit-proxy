@@ -27,6 +27,7 @@ pkgs.mkShell {
     # smali
     gradle
     unzip
+    ktlint
   ];
 
   shellHook = ''

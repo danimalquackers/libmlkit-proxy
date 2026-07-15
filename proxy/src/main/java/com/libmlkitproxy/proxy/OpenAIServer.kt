@@ -1,7 +1,5 @@
 package com.libmlkitproxy.proxy
 
-import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
@@ -12,58 +10,52 @@ import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.gson.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.serialization.gson.*
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
-import kotlin.math.min
 import java.util.UUID
-import java.io.ByteArrayInputStream
+import kotlin.math.min
 
-class OpenAIServer(private val port: Int) {
+class OpenAIServer(
+    private val port: Int,
+) {
     private val TAG = "LibMLKitProxy"
 
     fun serve() {
         try {
             Log.i(TAG, "Creating Ktor Netty server instance on port $port...")
-            val serverInstance = embeddedServer(Netty, configure = {
-                connector {
-                    port = this@OpenAIServer.port
-                }
+            val serverInstance =
+                embeddedServer(
+                    Netty,
+                    configure = {
+                        connector { port = this@OpenAIServer.port }
 
-                // Run server with HTTP/2 cleartext
-                enableHttp2 = true;
-                enableH2c = true;
-            }) {
-                install(ContentNegotiation) {
-                    gson {
-                        setPrettyPrinting()
+                        // Run server with HTTP/2 cleartext
+                        enableHttp2 = true
+                        enableH2c = true
+                    },
+                ) {
+                    install(ContentNegotiation) { gson { setPrettyPrinting() } }
+
+                    routing {
+                        // List models (stub)
+                        get("/v1/models") { handleModels(call) }
+
+                        // // Stateless completions with limited context
+                        // post("/v1/completions") {
+                        //     handleChatCompletions(call)
+                        // }
+
+                        // Multi-turn conversational chat
+                        post("/v1/chat/completions") { handleChatCompletions(call) }
                     }
                 }
-
-                routing {
-                    // List models (stub)
-                    get("/v1/models") { 
-                        handleModels(call) 
-                    }
-
-                    // // Stateless completions with limited context
-                    // post("/v1/completions") { 
-                    //     handleChatCompletions(call) 
-                    // }
-
-                    // Multi-turn conversational chat
-                    post("/v1/chat/completions") { 
-                        handleChatCompletions(call) 
-                    }
-                }
-            }
 
             // Monitor application ready event
             serverInstance.environment.monitor.subscribe(io.ktor.server.application.ServerReady) {
@@ -81,50 +73,53 @@ class OpenAIServer(private val port: Int) {
     private suspend fun handleModels(call: ApplicationCall) {
         val currentTime = System.currentTimeMillis() / 1000
 
-        val models = listOf (
-            "mlkit-truncate",
-            "mlkit-compress",
-            "mlkit-truncate-sanitize",
-            "mlkit-compress-sanitize"
-        )
+        val models =
+            listOf(
+                "mlkit-truncate",
+                "mlkit-compress",
+                "mlkit-truncate-sanitize",
+                "mlkit-compress-sanitize",
+            )
 
         // Return a stub model for apps that need one
-        val json = mapOf (
-            "object" to "list",
-            "data" to models.map { modelId ->
-                mapOf (
-                    "id" to modelId,
-                    "object" to "model",
-                    "created" to currentTime,
-                    "owned_by" to "google"
-                )
-            }
-        )
+        val json =
+            mapOf(
+                "object" to "list",
+                "data" to
+                    models.map { modelId ->
+                        mapOf(
+                            "id" to modelId,
+                            "object" to "model",
+                            "created" to currentTime,
+                            "owned_by" to "google",
+                        )
+                    },
+            )
 
-        call.respond(
-            HttpStatusCode.OK,
-            json
-        )
+        call.respond(HttpStatusCode.OK, json)
     }
 
     private suspend fun handleChatCompletions(call: ApplicationCall) {
         Log.i(TAG, "Received POST /v1/chat/completions request")
-        
+
         // Parse the request body
-        val body = try {
-            call.receive<Map<String, Any>>()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse request body as JSON: ${e.message}", e)
-            return badRequest(call, "Missing or malformed request body: ${e.message}")
-        }
+        val body =
+            try {
+                call.receive<Map<String, Any>>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse request body as JSON: ${e.message}", e)
+                return badRequest(call, "Missing or malformed request body: ${e.message}")
+            }
 
         Log.i(TAG, "Parsed request body successfully. Body: $body")
 
         // Many parameters can be ignored, like the model name
-        val messages = body["messages"] as? List<Map<String, Any>> ?: run {
-            Log.w(TAG, "Request body is missing 'messages' array, body: $body")
-            return badRequest(call, "Missing 'messages' array")
-        }
+        val messages =
+            body["messages"] as? List<Map<String, Any>>
+                ?: run {
+                    Log.w(TAG, "Request body is missing 'messages' array, body: $body")
+                    return badRequest(call, "Missing 'messages' array")
+                }
 
         // Start creating an MLKit prompt
         val promptBuilder = java.lang.StringBuilder()
@@ -147,13 +142,13 @@ class OpenAIServer(private val port: Int) {
                     textContent = contentObj
                 } else if (contentObj is JsonArray) {
                     // Append additional content
-                    for (j in 0 until contentObj.size) {
-                        val part = contentObj[j] as? Map<String, Any> ?: continue
-                        val type = part["type"]?.toString()?.uppercase() ?: ""
+                    for (part in contentObj) {
+                        val partMap = part as? Map<String, Any> ?: continue
+                        val type = partMap["type"]?.toString()?.lowercase() ?: ""
 
                         if (type == "image_url") {
                             // Extract image prompts
-                            val urlObj = part["image_url"] as? Map<String, Any> ?: continue
+                            val urlObj = partMap["image_url"] as? Map<String, Any> ?: continue
                             val urlString = urlObj["url"]?.toString() ?: ""
 
                             if (urlString.startsWith("data:image")) {
@@ -170,9 +165,11 @@ class OpenAIServer(private val port: Int) {
                                     Log.e(TAG, "Failed to decode base64 image_url at index $i, part $j", e)
                                     return badRequest(call, "Failed to decode base64 image_url: ${e.message}")
                                 }
+                            } else {
+                                Log.e(TAG, "Unsupported image url: $urlString")
                             }
                         } else if (type == "text") {
-                            textContent += part["text"]?.toString() ?: ""
+                            textContent += partMap["text"]?.toString() ?: ""
                             textContent += "\n"
                         } else {
                             Log.w(TAG, "Unsupported content type: $type")
@@ -216,17 +213,22 @@ class OpenAIServer(private val port: Int) {
                 if (maxTokensOpt > 0) { maxOutputTokens = maxTokensOpt }
                 if (temperatureOpt >= 0) { temperature = temperatureOpt.toFloat() }
             }
-        }
 
         val generativeModel = Generation.getClient()
 
         try {
-            // Preflight token check 
+            // Preflight token check
             val tokenResponse = generativeModel.countTokens(request)
             val maxTokens = generativeModel.getTokenLimit()
             if (tokenResponse.totalTokens > maxTokens) {
-                Log.w(TAG, "Context window exceeded. Limit: $maxTokens, Request: ${tokenResponse.totalTokens}")
-                return badRequest(call, "Context window exceeded. Limit is $maxTokens tokens, but request was ${tokenResponse.totalTokens} tokens.")
+                Log.w(
+                    TAG,
+                    "Context window exceeded. Limit: $maxTokens, Request: ${tokenResponse.totalTokens}",
+                )
+                return badRequest(
+                    call,
+                    "Context window exceeded. Limit is $maxTokens tokens, but request was ${tokenResponse.totalTokens} tokens.",
+                )
             }
 
             // Execute inferencing
@@ -241,37 +243,37 @@ class OpenAIServer(private val port: Int) {
 
             Log.d(TAG, "Generated text: $generatedText")
 
-            val response = mapOf(
-                "id" to "mlkit-${UUID.randomUUID()}",
-                "object" to "chat.completion",
-                "created" to System.currentTimeMillis() / 1000,
-                "model" to "gemini-nano",
-                "choices" to listOf(
-                    mapOf(
-                        "index" to 0,
-                        "message" to mapOf(
-                            "role" to "assistant",
-                            "content" to generatedText
+            val response =
+                mapOf(
+                    "id" to "mlkit-${UUID.randomUUID()}",
+                    "object" to "chat.completion",
+                    "created" to System.currentTimeMillis() / 1000,
+                    "model" to "gemini-nano",
+                    "choices" to
+                        listOf(
+                            mapOf(
+                                "index" to 0,
+                                "message" to
+                                    mapOf(
+                                        "role" to "assistant",
+                                        "content" to generatedText,
+                                    ),
+                                "finish_reason" to "stop",
+                            ),
                         ),
-                        "finish_reason" to "stop"
-                    )
-                ),
-
-                // Inject the pre-flight token math into the OpenAI usage block
-                "usage" to mapOf(
-                    "prompt_tokens" to tokenResponse.totalTokens,
-                    "total_tokens" to tokenResponse.totalTokens
+                    // Inject the pre-flight token math into the OpenAI usage block
+                    "usage" to
+                        mapOf(
+                            "prompt_tokens" to tokenResponse.totalTokens,
+                            "total_tokens" to tokenResponse.totalTokens,
+                        ),
                 )
-            )
 
             // Log the final JSON response
             Log.d(TAG, "Full JSON response: $response")
 
             // Convert the JSON object into an in-memory binary blob to avoid blocking
-            call.respond(
-                HttpStatusCode.OK,
-                response
-            )
+            call.respond(HttpStatusCode.OK, response)
         } catch (e: Exception) {
             handleException(call, e)
         } finally {
@@ -289,44 +291,72 @@ class OpenAIServer(private val port: Int) {
         return sanitizedText.trim()
     }
 
-    private suspend fun handleException(call: ApplicationCall, e: Exception) {
+    private suspend fun handleException(
+        call: ApplicationCall,
+        e: Exception,
+    ) {
         Log.e(TAG, "Error generating content", e)
 
         if (e is GenAiException) {
-            val (status, type, message) = when (e.errorCode) {
-                GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED -> 
-                    Triple(HttpStatusCode.Forbidden, "insufficient_quota", "App is in the background. Foreground required.")
-                GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED -> 
-                    Triple(HttpStatusCode.TooManyRequests, "rate_limit_exceeded", "Battery usage quota exceeded for this app.")
-                GenAiException.ErrorCode.BUSY -> 
-                    Triple(HttpStatusCode.ServiceUnavailable, "server_overloaded", "The service is currently busy.")
-                GenAiException.ErrorCode.REQUEST_TOO_LARGE -> 
-                    Triple(HttpStatusCode.BadRequest, "context_length_exceeded", "Request context window is too large.")
-                else -> 
-                    Triple(HttpStatusCode.InternalServerError, "internal_error", "MLKit error code: ${e.errorCode}")
-            }
+            val (status, type, message) =
+                when (e.errorCode) {
+                    GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED ->
+                        Triple(
+                            HttpStatusCode.Forbidden,
+                            "insufficient_quota",
+                            "App is in the background. Foreground required.",
+                        )
+                    GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED ->
+                        Triple(
+                            HttpStatusCode.TooManyRequests,
+                            "rate_limit_exceeded",
+                            "Battery usage quota exceeded for this app.",
+                        )
+                    GenAiException.ErrorCode.BUSY ->
+                        Triple(
+                            HttpStatusCode.ServiceUnavailable,
+                            "server_overloaded",
+                            "The service is currently busy.",
+                        )
+                    GenAiException.ErrorCode.REQUEST_TOO_LARGE ->
+                        Triple(
+                            HttpStatusCode.BadRequest,
+                            "context_length_exceeded",
+                            "Request context window is too large.",
+                        )
+                    else ->
+                        Triple(
+                            HttpStatusCode.InternalServerError,
+                            "internal_error",
+                            "MLKit error code: ${e.errorCode}",
+                        )
+                }
             return errorResponse(call, status, message, type)
         }
 
-        return errorResponse(call, HttpStatusCode.InternalServerError, e.message ?: "Unknown error", "internal_error")
+        return errorResponse(
+            call,
+            HttpStatusCode.InternalServerError,
+            e.message ?: "Unknown error",
+            "internal_error",
+        )
     }
 
-    private suspend fun errorResponse(call: ApplicationCall, status: HttpStatusCode, message: String, type: String) {
+    private suspend fun errorResponse(
+        call: ApplicationCall,
+        status: HttpStatusCode,
+        message: String,
+        type: String,
+    ) {
         Log.e(TAG, "Returning HTTP $status: $message (type: $type)")
-        val errorJson = mapOf(
-            "error" to mapOf(
-                "message" to message,
-                "type" to type
-            )
-        )
+        val errorJson = mapOf("error" to mapOf("message" to message, "type" to type))
 
-        call.respondText(
-            errorJson.toString(),
-            ContentType.Application.Json,
-            status
-        )
+        call.respondText(errorJson.toString(), ContentType.Application.Json, status)
     }
 
     // Stub helpers for errors
-    private suspend fun badRequest(call: ApplicationCall, msg: String) = errorResponse(call, HttpStatusCode.BadRequest, msg, "invalid_request_error")
+    private suspend fun badRequest(
+        call: ApplicationCall,
+        msg: String,
+    ) = errorResponse(call, HttpStatusCode.BadRequest, msg, "invalid_request_error")
 }
