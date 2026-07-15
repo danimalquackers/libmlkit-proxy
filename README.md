@@ -12,7 +12,7 @@ A lightweight, zero-touch Android library that exposes an OpenAI-compatible HTTP
 
 * `GET /v1/models` - Returns available on-device models.
 * `POST /v1/chat/completions` - Powered by ML Kit GenAI Prompt API (Gemini Nano).
-* `POST /v1/audio/transcriptions` - Powered by ML Kit GenAI Speech Recognition API.
+* `POST /v1/audio/transcriptions` - Powered by ML Kit GenAI Speech Recognition API (not implemented yet).
 
 ## ⚠️ Limitations & Hardware Requirements
 
