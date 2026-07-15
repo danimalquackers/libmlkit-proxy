@@ -1,5 +1,3 @@
-rootProject.name = "libmlkit-proxy"
-
 pluginManagement {
     repositories {
         google()
@@ -15,3 +13,10 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
+
+rootProject.name = "LibMLKitProxy"
+
+// Include subprojects
+include(":api")
+include(":proxy")
+include(":host")
