@@ -8,6 +8,8 @@ A lightweight, zero-touch Android library that exposes an OpenAI-compatible HTTP
 * **Always-On, Safe Background Server:** The local Ktor server runs continuously but defers OS constraint enforcement (like background execution blocks and battery quotas) directly to the native ML Kit SDK, gracefully returning API errors to the client.
 * **OpenAI Compatible:** Drop-in replacement for clients expecting `https://api.openai.com/v1/`.
 
+See [USAGE.md](./USAGE.md) for instructions on how to inject the library into a target application.
+
 ## Supported Endpoints
 
 * `GET /v1/models` - Returns available on-device models.
