@@ -18,7 +18,7 @@ import com.google.mlkit.genai.prompt.GenerativeModel
 import kotlinx.coroutines.*
 import kotlin.math.abs
 
-class MLKitProxyImplementation : MLKitProxyInterface {
+class MLKitProxy : MLKitProxyInterface {
     private var server: OpenAIServer? = null
     private val TAG = "LibMLKitProxy"
 

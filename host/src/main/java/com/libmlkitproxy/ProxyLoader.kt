@@ -45,7 +45,7 @@ class ProxyLoader : ContentProvider() {
                     )
 
                     // Load and instantiate
-                    val proxyImplClass = proxyClassLoader.loadClass("com.libmlkitproxy.proxy.MLKitProxyImplementation")
+                    val proxyImplClass = proxyClassLoader.loadClass("com.libmlkitproxy.proxy.MLKitProxy")
                     val proxyInstance = proxyImplClass.getDeclaredConstructor().newInstance() as MLKitProxyInterface
 
                     // Hand off control to the dynamically loaded code
