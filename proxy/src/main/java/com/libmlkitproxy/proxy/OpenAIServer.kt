@@ -140,7 +140,7 @@ class OpenAIServer(
 
                 if (contentObj is String) {
                     textContent = contentObj
-                } else if (contentObj is JsonArray) {
+                } else if (contentObj is List<*>) {
                     // Append additional content
                     for (part in contentObj) {
                         val partMap = part as? Map<String, Any> ?: continue
