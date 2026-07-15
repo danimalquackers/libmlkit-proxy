@@ -5,9 +5,9 @@ default:
     @just --list
 
 # Build the standard Android library (.aar)
-aar:
-    ./gradlew assembleRelease
-    @echo "AAR built at: build/outputs/aar/libmlkit-proxy-release.aar"
+aar: clean
+    ./gradlew :host:assembleRelease
+    @echo "AAR built at: host/build/outputs/aar/host-release.aar"
 
 # Build a fat classes.dex (for LSPosed / ReVanced injection)
 dex: aar
