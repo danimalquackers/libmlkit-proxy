@@ -47,7 +47,7 @@ dependencies {
 
     // ML Kit GenAI APIs
     implementation("com.google.mlkit:common:18.11.0")
-    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta3")
     implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha1")
 
     // Coroutines support

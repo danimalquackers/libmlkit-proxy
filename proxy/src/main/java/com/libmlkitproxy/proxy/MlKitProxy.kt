@@ -12,6 +12,7 @@ import android.widget.Toast
 import com.google.mlkit.common.MlKit
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.libmlkitproxy.api.MlKitProxyInterface
@@ -66,8 +67,26 @@ class MLKitProxy : MlKitProxyInterface {
                 generativeModel = Generation.getClient()
 
                 // Determine the MLKit enablement status
-                var status = generativeModel.checkStatus()
-                val packageName = context.packageName
+                var status =
+                    try {
+                        generativeModel.checkStatus()
+                    } catch (e: GenAiException) {
+                        val FEATURE_UNAVAILABLE = 606
+                        val STRUCTURED_OUTPUT_NOT_SUPPORTED = 648
+
+                        // Allow silent failure if structured output is unavailable
+                        if (
+                            e.errorCode == FEATURE_UNAVAILABLE &&
+                            e.message?.contains(STRUCTURED_OUTPUT_NOT_SUPPORTED.toString()) == true
+                        ) {
+                            Log.w(TAG, "Structured output not supported, but proceeding anyway")
+
+                            // Default to downloadable to allow execution to continue
+                            FeatureStatus.AVAILABLE
+                        } else {
+                            throw e
+                        }
+                    }
 
                 // Trigger a model download if needed
                 if (status == FeatureStatus.DOWNLOADABLE) {
@@ -80,6 +99,7 @@ class MLKitProxy : MlKitProxyInterface {
                             is DownloadStatus.DownloadStarted -> {
                                 totalBytes = downloadStatus.bytesToDownload
                             }
+
                             is DownloadStatus.DownloadProgress -> {
                                 val bytes = downloadStatus.totalBytesDownloaded
 
@@ -89,10 +109,14 @@ class MLKitProxy : MlKitProxyInterface {
                                     Log.i(TAG, "Download progress: $bytes bytes")
                                 }
                             }
+
                             is DownloadStatus.DownloadCompleted -> {
                                 Log.i(TAG, "Download finished. Starting server...")
+                                status = FeatureStatus.AVAILABLE
+
                                 showToast(context, "Download complete")
                             }
+
                             is DownloadStatus.DownloadFailed -> {
                                 Log.e(TAG, "Model download failed. Cannot start server.")
                             }
@@ -108,14 +132,14 @@ class MLKitProxy : MlKitProxyInterface {
                         Log.w(TAG, "ML Kit Model download already in progress")
                         delay(30000) // Poll every 30 seconds
                     }
-                }
 
-                // Refresh the status, it should have changed by now
-                status = generativeModel.checkStatus()
+                    status = FeatureStatus.AVAILABLE
+                }
 
                 if (status == FeatureStatus.AVAILABLE) {
                     Log.i(TAG, "ML Kit is available, starting server...")
 
+                    val packageName = context.packageName
                     startServer(context, packageName)
                 } else {
                     Log.e(TAG, "ML Kit GenAI not available on this device. Status: $status")
