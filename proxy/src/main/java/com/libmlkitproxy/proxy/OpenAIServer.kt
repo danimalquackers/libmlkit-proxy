@@ -10,6 +10,7 @@ import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerationConfig
 import com.google.mlkit.genai.prompt.ImagePart
+import com.google.mlkit.genai.prompt.PromptPrefix
 import com.google.mlkit.genai.prompt.Part
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
@@ -225,7 +226,7 @@ class OpenAIServer(
 
         try {
             // Create a temporary request for context limit checking (since resources like bitmaps are recycled)
-            val tokenRequest = createRequest(parts)
+            val tokenRequest = createRequest(parts, false)
 
             // Preflight token check
             val tokenResponse = generativeModel.countTokens(tokenRequest.build())
@@ -286,7 +287,7 @@ class OpenAIServer(
                     "usage" to
                         mapOf(
                             "prompt_tokens" to tokenResponse.totalTokens,
-                            "total_tokens" to tokenResponse.totalTokens,
+                            "total_tokens" to tokenResponse.totalTokens, // The MLKit API does not return the number of output tokens
                         ),
                 )
 
@@ -306,13 +307,14 @@ class OpenAIServer(
         }
     }
 
-    private fun createRequest(content: Triple<String?, Bitmap?, String>): GenerateContentRequest.Builder {
-        GenerationConfig.Builder()
+    private fun createRequest(content: Triple<String?, Bitmap?, String>, cachePrefix: Boolean = true): GenerateContentRequest.Builder {
         val contentBuilder = Content.Builder()
         val (systemInstruction, bitmap, prompt) = content
 
         // Add the system instruction if there is one
-        if (systemInstruction != null && systemInstruction.isNotBlank()) {
+        val hasSystemInstruction = systemInstruction != null && systemInstruction.isNotBlank()
+        val hasBitmap = bitmap != null
+        if ((!cachePrefix && hasSystemInstruction) || (hasSystemInstruction && hasBitmap)) {
             contentBuilder.addPart(SystemInstruction(systemInstruction))
         }
 
@@ -328,6 +330,13 @@ class OpenAIServer(
 
         // Create a GenerateContentRequest
         val builder = GenerateContentRequest.Builder(contentBuilder.build())
+
+        // Enable prefix caching for single-mode requests
+        if (cachePrefix && hasSystemInstruction && !hasBitmap) {
+            Log.i(TAG, "Using prefix caching for this request")
+            builder.promptPrefix = PromptPrefix(systemInstruction)
+        }
+
         return builder
     }
 
