@@ -25,6 +25,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.*
 import java.util.UUID
+import java.lang.StringBuilder
 import kotlin.math.min
 
 class OpenAIServer(
@@ -127,7 +128,8 @@ class OpenAIServer(
                 }
 
         // Start creating an MLKit prompt
-        val promptBuilder = java.lang.StringBuilder()
+        val systemInstructionBuilder = StringBuilder()
+        val promptBuilder = StringBuilder()
         var parsedBitmap: Bitmap? = null
 
         try {
@@ -184,7 +186,11 @@ class OpenAIServer(
 
                 // Concatenate text parts into one
                 if (textContent.isNotBlank()) {
-                    promptBuilder.append("$role: $textContent\n")
+                    if (role == "SYSTEM") {
+                        systemInstructionBuilder.append("$textContent\n")
+                    } else {
+                        promptBuilder.append("$role: $textContent\n")
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -192,11 +198,11 @@ class OpenAIServer(
             return badRequest(call, "Malformed messages payload: ${e.message}")
         }
 
-        // Append the assistant role to continue generation
-        promptBuilder.append("ASSISTANT: ")
-        val finalContext = promptBuilder.toString()
+        // Finalize the prompt strings
+        val systemInstruction = systemInstructionBuilder.toString()
+        val prompt = promptBuilder.toString()
 
-        Log.d(TAG, "Final context: $finalContext")
+        Log.d(TAG, "Final request: SYSTEM: $systemInstruction\n$prompt")
 
         // Passthru generation parameters
         var maxTokensOpt = body["max_tokens"] as? Int ?: 256
@@ -210,9 +216,9 @@ class OpenAIServer(
         // Generate a list of content (system instructions, images, text)
         val parts =
             Triple(
-                null,
+                systemInstruction,
                 parsedBitmap,
-                finalContext,
+                prompt,
             )
 
         val generativeModel = Generation.getClient()
@@ -303,10 +309,10 @@ class OpenAIServer(
     private fun createRequest(content: Triple<String?, Bitmap?, String>): GenerateContentRequest.Builder {
         GenerationConfig.Builder()
         val contentBuilder = Content.Builder()
-        val (systemInstruction, bitmap, text) = content
+        val (systemInstruction, bitmap, prompt) = content
 
         // Add the system instruction if there is one
-        if (systemInstruction != null) {
+        if (systemInstruction != null && systemInstruction.isNotBlank()) {
             contentBuilder.addPart(SystemInstruction(systemInstruction))
         }
 
@@ -316,7 +322,9 @@ class OpenAIServer(
         }
 
         // Add the text
-        contentBuilder.addPart(TextPart(text))
+        if (prompt.isNotBlank()) {
+            contentBuilder.addPart(TextPart(prompt))
+        }
 
         // Create a GenerateContentRequest
         val builder = GenerateContentRequest.Builder(contentBuilder.build())
