@@ -341,36 +341,45 @@ class OpenAIServer(
         if (e is GenAiException) {
             val (status, type, message) =
                 when (e.errorCode) {
-                    GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED ->
+                    GenAiException.ErrorCode.BACKGROUND_USE_BLOCKED -> {
                         Triple(
                             HttpStatusCode.Forbidden,
                             "insufficient_quota",
                             "App is in the background. Foreground required.",
                         )
-                    GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED ->
+                    }
+
+                    GenAiException.ErrorCode.PER_APP_BATTERY_USE_QUOTA_EXCEEDED -> {
                         Triple(
                             HttpStatusCode.TooManyRequests,
                             "rate_limit_exceeded",
                             "Battery usage quota exceeded for this app.",
                         )
-                    GenAiException.ErrorCode.BUSY ->
+                    }
+
+                    GenAiException.ErrorCode.BUSY -> {
                         Triple(
                             HttpStatusCode.ServiceUnavailable,
                             "server_overloaded",
                             "The service is currently busy.",
                         )
-                    GenAiException.ErrorCode.REQUEST_TOO_LARGE ->
+                    }
+
+                    GenAiException.ErrorCode.REQUEST_TOO_LARGE -> {
                         Triple(
                             HttpStatusCode.BadRequest,
                             "context_length_exceeded",
                             "Request context window is too large.",
                         )
-                    else ->
+                    }
+
+                    else -> {
                         Triple(
                             HttpStatusCode.InternalServerError,
                             "internal_error",
                             "MLKit error code: ${e.errorCode}",
                         )
+                    }
                 }
             return errorResponse(call, status, message, type)
         }
