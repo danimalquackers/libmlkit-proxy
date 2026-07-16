@@ -10,8 +10,8 @@ import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerationConfig
 import com.google.mlkit.genai.prompt.ImagePart
-import com.google.mlkit.genai.prompt.PromptPrefix
 import com.google.mlkit.genai.prompt.Part
+import com.google.mlkit.genai.prompt.PromptPrefix
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import io.ktor.http.ContentType
@@ -25,8 +25,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.*
-import java.util.UUID
 import java.lang.StringBuilder
+import java.util.UUID
 import kotlin.math.min
 
 class OpenAIServer(
@@ -307,7 +307,10 @@ class OpenAIServer(
         }
     }
 
-    private fun createRequest(content: Triple<String?, Bitmap?, String>, cachePrefix: Boolean = true): GenerateContentRequest.Builder {
+    private fun createRequest(
+        content: Triple<String?, Bitmap?, String>,
+        cachePrefix: Boolean = true,
+    ): GenerateContentRequest.Builder {
         val contentBuilder = Content.Builder()
         val (systemInstruction, bitmap, prompt) = content
 

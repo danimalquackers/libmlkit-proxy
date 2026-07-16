@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -50,7 +52,26 @@ tasks.register<Copy>("copyProxyPayload") {
     into(layout.buildDirectory.dir("generated/proxy_assets"))
 }
 
+tasks.register("generateProxyHash") {
+    val apkFile = layout.buildDirectory.file("generated/proxy_assets/libmlkit-proxy.apk")
+    val hashFile = layout.buildDirectory.file("generated/proxy_assets/libmlkit-proxy.apk.sha256")
+
+    dependsOn("copyProxyPayload")
+
+    doLast {
+        // Hash the proxy APK for versioning
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash =
+            digest
+                .digest(apkFile.get().asFile.readBytes())
+                .joinToString("") { "%02x".format(it) }
+
+        hashFile.get().asFile.writeText(hash)
+    }
+}
+
 // Ensure the copy task runs automatically before the host module begins building
 tasks.named("preBuild").configure {
     dependsOn("copyProxyPayload")
+    dependsOn("generateProxyHash")
 }

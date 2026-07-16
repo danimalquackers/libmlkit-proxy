@@ -19,9 +19,9 @@ class AssetExtractor {
             val outputDir = context.getDir("proxy_payloads", Context.MODE_PRIVATE)
             val outputFile = File(outputDir, assetFileName)
 
-            // Skip extraction if it already exists
-            // TODO: Implement a more robust version/checksum verification
-            if (outputFile.exists()) {
+            // Skip extraction if the proxy is already up to date
+            if (!needsExtraction(context)) {
+                Log.i(TAG, "Skipping extraction, no update needed")
                 return outputFile
             }
 
@@ -70,6 +70,22 @@ class AssetExtractor {
                     }
                 }
             }
+        }
+
+        private fun needsExtraction(context: Context): Boolean {
+            val prefs = context.getSharedPreferences("libmlkit_proxy_prefs", Context.MODE_PRIVATE)
+
+            // Read the embedded hash from the embedded assets file
+            val embeddedHash =
+                context.assets
+                    .open("libmlkit-proxy.apk.sha256")
+                    .bufferedReader()
+                    .use { it.readText() }
+
+            // Get the hash from the last successful extraction
+            val storedHash = prefs.getString("last_extracted_hash", null)
+
+            return storedHash == null || embeddedHash != storedHash
         }
     }
 }
