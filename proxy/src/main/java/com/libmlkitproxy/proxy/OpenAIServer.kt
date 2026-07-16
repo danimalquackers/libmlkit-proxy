@@ -1,13 +1,18 @@
 package com.libmlkitproxy.proxy
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.google.mlkit.genai.common.GenAiException
+import com.google.mlkit.genai.prompt.Content
+import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerationConfig
 import com.google.mlkit.genai.prompt.ImagePart
+import com.google.mlkit.genai.prompt.Part
+import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
-import com.google.mlkit.genai.prompt.generateContentRequest
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.gson.*
@@ -162,7 +167,7 @@ class OpenAIServer(
 
                                     Log.i(TAG, "Attaching bitmap to prompt")
                                 } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to decode base64 image_url at index $i, part $j", e)
+                                    Log.e(TAG, "Failed to decode base64 image_url: ${e.message}", e)
                                     return badRequest(call, "Failed to decode base64 image_url: ${e.message}")
                                 }
                             } else {
@@ -202,23 +207,22 @@ class OpenAIServer(
 
         Log.i(TAG, "Preparing GenerateContentRequest for MLKit...")
 
-        // Build the request using the exact Beta 2 DSL signatures
-        val request = if (parsedBitmap != null) {
-            generateContentRequest(ImagePart(parsedBitmap), TextPart(finalContext)) {
-                if (maxTokensOpt > 0) { maxOutputTokens = maxTokensOpt }
-                if (temperatureOpt >= 0) { temperature = temperatureOpt.toFloat() }
-            }
-        } else {
-            generateContentRequest(TextPart(finalContext)) {
-                if (maxTokensOpt > 0) { maxOutputTokens = maxTokensOpt }
-                if (temperatureOpt >= 0) { temperature = temperatureOpt.toFloat() }
-            }
+        // Generate a list of content (system instructions, images, text)
+        val parts =
+            Triple(
+                null,
+                parsedBitmap,
+                finalContext,
+            )
 
         val generativeModel = Generation.getClient()
 
         try {
+            // Create a temporary request for context limit checking (since resources like bitmaps are recycled)
+            val tokenRequest = createRequest(parts)
+
             // Preflight token check
-            val tokenResponse = generativeModel.countTokens(request)
+            val tokenResponse = generativeModel.countTokens(tokenRequest.build())
             val maxTokens = generativeModel.getTokenLimit()
             if (tokenResponse.totalTokens > maxTokens) {
                 Log.w(
@@ -231,9 +235,20 @@ class OpenAIServer(
                 )
             }
 
+            // Build the request
+            val request = createRequest(parts)
+
+            // Apply optional parameters
+            if (maxTokensOpt > 0) {
+                request.maxOutputTokens = maxTokensOpt
+            }
+            if (temperatureOpt >= 0) {
+                request.temperature = temperatureOpt.toFloat()
+            }
+
             // Execute inferencing
             Log.i(TAG, "Generating content response...")
-            val result = generativeModel.generateContent(request)
+            val result = generativeModel.generateContent(request.build())
 
             // Extract text from the Candidate list
             var generatedText = result.candidates.firstOrNull()?.text ?: ""
@@ -277,9 +292,35 @@ class OpenAIServer(
         } catch (e: Exception) {
             handleException(call, e)
         } finally {
+            // Discard the original bitmap resource
+            parsedBitmap?.recycle()
+
             // Free up hardware resources for the host app when request finishes
             generativeModel.close()
         }
+    }
+
+    private fun createRequest(content: Triple<String?, Bitmap?, String>): GenerateContentRequest.Builder {
+        GenerationConfig.Builder()
+        val contentBuilder = Content.Builder()
+        val (systemInstruction, bitmap, text) = content
+
+        // Add the system instruction if there is one
+        if (systemInstruction != null) {
+            contentBuilder.addPart(SystemInstruction(systemInstruction))
+        }
+
+        // Add the image if there is one
+        if (bitmap != null) {
+            contentBuilder.addPart(ImagePart(bitmap.copy(bitmap.config, true)))
+        }
+
+        // Add the text
+        contentBuilder.addPart(TextPart(text))
+
+        // Create a GenerateContentRequest
+        val builder = GenerateContentRequest.Builder(contentBuilder.build())
+        return builder
     }
 
     private fun sanitizeResponse(responseText: String): String {
