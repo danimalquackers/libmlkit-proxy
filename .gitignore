@@ -3,5 +3,6 @@
 
 # build artifacts
 .gradle/
-build/
 .kotlin/
+build/
+dist/
