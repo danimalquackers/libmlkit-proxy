@@ -142,6 +142,7 @@ class MLKitProxy : MlKitProxyInterface {
                     val packageName = context.packageName
                     startServer(context, packageName)
                 } else {
+                    showToast(context, "ML Kit not available on this device")
                     Log.e(TAG, "ML Kit GenAI not available on this device. Status: $status")
                 }
             } catch (e: Exception) {
