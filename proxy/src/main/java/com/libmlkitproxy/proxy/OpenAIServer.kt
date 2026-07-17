@@ -130,8 +130,7 @@ class OpenAIServer(
 
         // Start creating an MLKit prompt
         val systemInstructionBuilder = StringBuilder()
-        val promptBuilder = StringBuilder()
-        var parsedBitmap: Bitmap? = null
+        val objects = mutableListOf<Any>()
 
         try {
             // Parse the full context and handle multi-modal blocks
@@ -144,19 +143,20 @@ class OpenAIServer(
                 // Parse the content
                 val contentObj = msg["content"]
 
-                var textContent = ""
-
                 if (contentObj is String) {
-                    textContent = contentObj
+                    if (role == "SYSTEM") {
+                        systemInstructionBuilder.appendLine(contentObj)
+                    } else {
+                        objects.add("$role: $contentObj")
+                    }
                 } else if (contentObj is List<*>) {
                     // Append additional content
-                    for (part in contentObj) {
-                        val partMap = part as? Map<String, Any> ?: continue
-                        val type = partMap["type"]?.toString()?.lowercase() ?: ""
+                    for (part in contentObj as List<Map<String, Any>>) {
+                        val type = part["type"]?.toString()?.lowercase() ?: ""
 
                         if (type == "image_url") {
                             // Extract image prompts
-                            val urlObj = partMap["image_url"] as? Map<String, Any> ?: continue
+                            val urlObj = part["image_url"] as? Map<String, Any> ?: continue
                             val urlString = urlObj["url"]?.toString() ?: ""
 
                             if (urlString.startsWith("data:image")) {
@@ -166,7 +166,8 @@ class OpenAIServer(
                                     val decodedBytes = Base64.decode(base64Data, Base64.DEFAULT)
 
                                     // Save the image, overwriting any previous images if needed
-                                    parsedBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                                    val parsedBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                                    objects.add(parsedBitmap)
 
                                     Log.i(TAG, "Attaching bitmap to prompt")
                                 } catch (e: Exception) {
@@ -177,20 +178,14 @@ class OpenAIServer(
                                 Log.e(TAG, "Unsupported image url: $urlString")
                             }
                         } else if (type == "text") {
-                            textContent += partMap["text"]?.toString() ?: ""
-                            textContent += "\n"
+                            val parsedText = part["text"]?.toString()
+
+                            if (parsedText != null && parsedText.isNotEmpty()) {
+                                objects.add("$role: $parsedText")
+                            }
                         } else {
                             Log.w(TAG, "Unsupported content type: $type")
                         }
-                    }
-                }
-
-                // Concatenate text parts into one
-                if (textContent.isNotBlank()) {
-                    if (role == "SYSTEM") {
-                        systemInstructionBuilder.append("$textContent\n")
-                    } else {
-                        promptBuilder.append("$role: $textContent\n")
                     }
                 }
             }
@@ -201,9 +196,6 @@ class OpenAIServer(
 
         // Finalize the prompt strings
         val systemInstruction = systemInstructionBuilder.toString()
-        val prompt = promptBuilder.toString()
-
-        Log.d(TAG, "Final request: SYSTEM: $systemInstruction\n$prompt")
 
         // Passthru generation parameters
         var maxTokensOpt = body["max_tokens"] as? Int ?: 256
@@ -216,10 +208,9 @@ class OpenAIServer(
 
         // Generate a list of content (system instructions, images, text)
         val parts =
-            Triple(
+            Pair(
                 systemInstruction,
-                parsedBitmap,
-                prompt,
+                objects,
             )
 
         val generativeModel = Generation.getClient()
@@ -299,8 +290,12 @@ class OpenAIServer(
         } catch (e: Exception) {
             handleException(call, e)
         } finally {
-            // Discard the original bitmap resource
-            parsedBitmap?.recycle()
+            // Free bitmap resources
+            for (obj in objects) {
+                if (obj is Bitmap) {
+                    obj.recycle()
+                }
+            }
 
             // Free up hardware resources for the host app when request finishes
             generativeModel.close()
@@ -308,27 +303,42 @@ class OpenAIServer(
     }
 
     private fun createRequest(
-        content: Triple<String?, Bitmap?, String>,
+        content: Pair<String?, List<Any>>,
         cachePrefix: Boolean = true,
     ): GenerateContentRequest.Builder {
         val contentBuilder = Content.Builder()
-        val (systemInstruction, bitmap, prompt) = content
+        val (systemInstruction, objects) = content
+
+        var hasBitmap = false
+
+        // Convert the input objects to multimodal parts
+        val previewPrompt = StringBuilder()
+        for (part in objects) {
+            when (part) {
+                is String -> {
+                    contentBuilder.addPart(TextPart(part))
+
+                    previewPrompt.appendLine(part)
+                }
+
+                is Bitmap -> {
+                    contentBuilder.addPart(ImagePart(part.copy(part.config, true)))
+                    hasBitmap = true
+
+                    previewPrompt.appendLine("[Image]")
+                }
+
+                else -> {
+                    Log.w(TAG, "Unsupported content type: $part")
+                }
+            }
+        }
+        Log.d(TAG, "SYSTEM:\n$systemInstruction\n${previewPrompt.toString()}")
 
         // Add the system instruction if there is one
         val hasSystemInstruction = systemInstruction != null && systemInstruction.isNotBlank()
-        val hasBitmap = bitmap != null
         if ((!cachePrefix && hasSystemInstruction) || (hasSystemInstruction && hasBitmap)) {
             contentBuilder.addPart(SystemInstruction(systemInstruction))
-        }
-
-        // Add the image if there is one
-        if (bitmap != null) {
-            contentBuilder.addPart(ImagePart(bitmap.copy(bitmap.config, true)))
-        }
-
-        // Add the text
-        if (prompt.isNotBlank()) {
-            contentBuilder.addPart(TextPart(prompt))
         }
 
         // Create a GenerateContentRequest
