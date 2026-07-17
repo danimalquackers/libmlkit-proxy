@@ -26,12 +26,17 @@ class AssetExtractor {
             }
 
             try {
+                // Temporarily allow write access
+                if (outputFile.exists()) outputFile.setWritable(true)
+
+                // Extract the proxy asset
                 context.getAssets().open(assetFileName).use { inputStream ->
                     FileOutputStream(outputFile).use { outputStream ->
                         inputStream.copyTo(outputStream, bufferSize = 8192)
                     }
                 }
 
+                // Mark the file as readonly before execution
                 outputFile.setReadOnly()
             } catch (e: Exception) {
                 Log.e(TAG, "Error extracting proxy payload", e)
