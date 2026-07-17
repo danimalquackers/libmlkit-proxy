@@ -403,6 +403,14 @@ class OpenAIServer(
                         )
                     }
 
+                    GenAiException.ErrorCode.REQUEST_PROCESSING_ERROR -> {
+                        Triple(
+                            HttpStatusCode.BadRequest,
+                            "invalid_request_error",
+                            "Request did not pass policy check."
+                        )
+                    }
+
                     else -> {
                         Triple(
                             HttpStatusCode.InternalServerError,
