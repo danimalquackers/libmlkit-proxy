@@ -121,6 +121,7 @@ class OpenAIServer(
         Log.i(TAG, "Parsed request body successfully. Body: $body")
 
         // Many parameters can be ignored, like the model name
+        @Suppress("UNCHECKED_CAST")
         val messages =
             body["messages"] as? List<Map<String, Any>>
                 ?: run {
@@ -135,6 +136,7 @@ class OpenAIServer(
         try {
             // Parse the full context and handle multi-modal blocks
             for (i in 0 until messages.size) {
+                @Suppress("UNCHECKED_CAST")
                 val msg = messages[i] as? Map<String, Any> ?: continue
 
                 // Parse the agent/user role
@@ -151,11 +153,13 @@ class OpenAIServer(
                     }
                 } else if (contentObj is List<*>) {
                     // Append additional content
+                    @Suppress("UNCHECKED_CAST")
                     for (part in contentObj as List<Map<String, Any>>) {
                         val type = part["type"]?.toString()?.lowercase() ?: ""
 
                         if (type == "image_url") {
                             // Extract image prompts
+                            @Suppress("UNCHECKED_CAST")
                             val urlObj = part["image_url"] as? Map<String, Any> ?: continue
                             val urlString = urlObj["url"]?.toString() ?: ""
 
