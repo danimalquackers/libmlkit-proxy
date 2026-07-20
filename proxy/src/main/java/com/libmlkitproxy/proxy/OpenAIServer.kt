@@ -36,7 +36,7 @@ class OpenAIServer(
 
     fun serve() {
         try {
-            Log.i(TAG, "Creating Ktor Netty server instance on port $port...")
+            Log.i(TAG, "Starting MLKit proxy server on port $port...")
             val serverInstance =
                 embeddedServer(
                     Netty,
@@ -65,15 +65,10 @@ class OpenAIServer(
                 }
 
             // Monitor application ready event
-            serverInstance.environment.monitor.subscribe(io.ktor.server.application.ServerReady) {
-                Log.i(TAG, "Ktor Netty server is READY and listening on port $port")
-            }
-
-            Log.i(TAG, "Starting Ktor Netty server asynchronously...")
-            serverInstance.start(wait = false)
-            Log.i(TAG, "Ktor Netty server start() call returned.")
+            serverInstance.start(wait = true)
+            Log.i(TAG, "MLKit proxy server is listening on port $port")
         } catch (t: Throwable) {
-            Log.e(TAG, "Exception/Error during Netty server initialization or startup", t)
+            Log.e(TAG, "Exception/Error during proxy server initialization or startup", t)
         }
     }
 
@@ -82,10 +77,7 @@ class OpenAIServer(
 
         val models =
             listOf(
-                "mlkit-truncate",
-                "mlkit-compress",
-                "mlkit-truncate-sanitize",
-                "mlkit-compress-sanitize",
+                "mlkit"
             )
 
         // Return a stub model for apps that need one
