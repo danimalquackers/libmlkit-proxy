@@ -50,7 +50,11 @@ class OpenAIServer(
                         }
 
                         // Voice transcription service
-                        // post("/v1/audio/transcriptions") { handleAudioTranscriptions(call) }
+                        post("/v1/audio/transcriptions") {
+                            Log.i(TAG, "Received POST /v1/audio/transcriptions")
+
+                            SpeechHandler(call).handleRequest()
+                        }
                     }
                 }
 
