@@ -125,7 +125,7 @@ zipalign -v 4 injected.apk injected-aligned.apk
 uber-apk-signer -a injected-aligned.apk
 ```
 
-### Method 3: LSPosed / Xposed Module
+### Method 3: LSPosed / Xposed Module (Not Yet Implemented)
 
 Use this method for dynamic, root-level injection without modifying the target APK signature.
 
@@ -147,7 +147,7 @@ XposedHelpers.findAndHookMethod(Application.class, "onCreate", new XC_MethodHook
 });
 ```
 
-### Method 4: ReVanced Patches
+### Method 4: ReVanced Patches (Not Yet Implemented)
 
 Use this method to bundle the proxy as a selectable ReVanced Integration.
 
@@ -175,12 +175,12 @@ curl -X POST http://127.0.0.1:14320/v1/chat/completions \
   }'
 ```
 
-If the ML Kit model is downloaded and the app is foregrounded, you will receive a standard OpenAI-formatted JSON response. If the app is backgrounded, you will receive an HTTP 403 Forbidden error.
+If the ML Kit model is downloaded and the app is foregrounded, you will receive a standard OpenAI-formatted JSON response. If the app is backgrounded, you will receive an HTTP 403 Forbidden error or the request will stall.
 
 When an application supports OpenAI-compatible endpoints, use the following parameters to connect to `libmlkit-proxy`:
 
 * **Base URL:** `http://127.0.0.1:<port>/v1` using the port shown in the toast message.
-* **Model:** Use any value for the model, as it is ignored and Gemini Nano is used instead. This will change in a future version.
+* **Model:** Use any value for the model, as it is ignored and Gemini Nano is used instead. This may change in a future version.
 * **API Key:** Use any value for the API key, as it is ignored.
-* **Max Output Tokens:** Use any value up to 256, larger values will be clamped to 256 (default 256).
-* **Temperature:** Use any value between 0.0 to 1.0 (default 0.0).
+* **Max Output Tokens:** Use any value up to 256, larger values will be clamped to 256 (default 256). This setting only applies to text generations.
+* **Temperature:** Use any value between 0.0 to 1.0 (default 0.0). This setting only applies to text generations.
