@@ -43,15 +43,16 @@ dex: aar
     @cp {{BUILD_DIR}}/outputs/dex/classes.dex {{DIST_DIR}}/{{PKG_NAME}}.dex
     @echo "classes.dex built at: {{DIST_DIR}}/{{PKG_NAME}}.dex"
 
-# Generate smali files (for apktool smali injection)
+# Generate smali (for apktool smali injection)
 smali: dex
-    @mkdir -p {{BUILD_DIR}}/outputs/smali
+    @mkdir -p {{BUILD_DIR}}/temp {{BUILD_DIR}}/outputs/smali
 
     @echo "Disassembling classes.dex to smali..."
-    baksmali d {{BUILD_DIR}}/outputs/dex/classes.dex -o {{BUILD_DIR}}/outputs/smali/
+    baksmali d {{BUILD_DIR}}/outputs/dex/classes.dex -o {{BUILD_DIR}}/temp/
 
-    @cp -r {{BUILD_DIR}}/outputs/smali/ {{DIST_DIR}}/{{PKG_NAME}}_smali/
-    @echo "Smali files generated at: {{DIST_DIR}}/{{PKG_NAME}}_smali/"
+    @zip -r {{BUILD_DIR}}/outputs/smali.zip {{BUILD_DIR}}/temp/*
+    @cp {{BUILD_DIR}}/outputs/smali.zip {{DIST_DIR}}/{{PKG_NAME}}_smali.zip
+    @echo "Smali files generated at: {{DIST_DIR}}/{{PKG_NAME}}_smali.zip"
 
 # Clean all build outputs
 clean:
