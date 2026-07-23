@@ -61,6 +61,7 @@ pkgs.mkShell {
     apktool
     baksmali
     gradle
+    zip
     unzip
     ktlint
   ];

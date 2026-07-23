@@ -50,7 +50,7 @@ smali: dex
     @echo "Disassembling classes.dex to smali..."
     baksmali d {{BUILD_DIR}}/outputs/dex/classes.dex -o {{BUILD_DIR}}/temp/
 
-    @zip -r {{BUILD_DIR}}/outputs/smali.zip {{BUILD_DIR}}/temp/*
+    @(cd {{BUILD_DIR}}/temp/ && zip -r ../outputs/smali.zip ./*)
     @cp {{BUILD_DIR}}/outputs/smali.zip {{DIST_DIR}}/{{PKG_NAME}}_smali.zip
     @echo "Smali files generated at: {{DIST_DIR}}/{{PKG_NAME}}_smali.zip"
 

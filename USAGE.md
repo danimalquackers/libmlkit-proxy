@@ -49,12 +49,12 @@ just smali
 
 ## 💉 Injection Methods
 
-### Method 1: Source Inclusion (Standard Development)
+### Method 1: Gradle Source Inclusion (Standard Development)
 
 If you are modifying an open-source project and building it from source, use the `.aar` file.
 
 1. Run `just aar`.
-2. Copy `host-release.aar` to the target project's `app/libs/` directory and rename it to `libmlkit-proxy.aar`.
+2. Copy `dist/libmlkit-proxy.aar` to the target project's `app/libs/` directory
 3. Add the dependency to the target app's `build.gradle.kts`:
 
 ```kotlin
@@ -65,7 +65,7 @@ dependencies {
 }
 ```
 
-5. Build the app. The `ContentProvider` will self-register and start the proxy server on app launch.
+5. Build the app. The `ContentProvider` will self-register and all required permissions will be added, and the proxy server will start on app launch.
 
 ### Method 2: Smali Injection (apktool)
 
@@ -78,29 +78,51 @@ Use this method for static, permanent injection into an existing compiled .apk.
 apktool d target_app.apk -o decompiled_app/
 ```
 
-3. Copy the generated proxy smali files into the decompiled app's source tree:
+3. Copy the proxy library into the decompiled app's assets folder:
 
 ```bash
-cp -r build/outputs/smali/com/libmlkitproxy decompiled_app/smali/com/
+mkdir -p decompiled_app/assets/
+cp dist/libmlkit-proxy.apk decompiled_app/assets
 ```
 
-4. Open `decompiled_app/AndroidManifest.xml` and insert the `AutoInitProvider` inside the `<application>` tag:
+4. Merge the generated smali files into the decompiled app's source tree (use a higher numbered `smali_classes` folder if necessary):
+
+```bash
+mkdir -p decompiled_app/smali_classes4
+unzip dist/libmlkit-proxy_smali.zip -d decompiled_app/smali_classes4
+```
+
+5. Open `decompiled_app/AndroidManifest.xml` and insert the following elements within the `<manifest>` tag:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+<uses-permission android:name="com.google.android.apps.aicore.service.BIND_SERVICE" />
+
+<queries>
+    <package android:name="com.google.android.aicore" />
+</queries>
+```
+
+If the manifest already includes any of the above elements, do not duplicate them.
+
+6. Then, insert the `ProxyLoader provider` inside the `<application>` tag:
 
 ```xml
 <provider
-    android:name="com.libmlkitproxy.AutoInitProvider"
-    android:authorities="YOUR_TARGET_APP_PACKAGE_NAME.mlkitproxyinit"
-    android:exported="false"
-    android:initOrder="199" />
+  android:name="com.libmlkitproxy.ProxyLoader"
+  android:authorities="${applicationId}.mlkitproxyinit"
+  android:exported="true"
+  android:initOrder="199" />
 ```
 
-(Note: Ensure the INTERNET permission is also present in the manifest).
-
-5. Rebuild and sign the modified APK:
+7. Rebuild and sign the modified APK:
 
 ```bash
-apktool b decompiled_app -o injected_app.apk
-uber-apk-signer -a injected_app.apk
+apktool b decompiled_app -o injected.apk
+zipalign -v 4 injected.apk injected-aligned.apk
+uber-apk-signer -a injected-aligned.apk
 ```
 
 ### Method 3: LSPosed / Xposed Module
