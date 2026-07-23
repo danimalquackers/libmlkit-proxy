@@ -133,7 +133,7 @@ class ChatHandler(
             // Parse the full context and handle multi-modal blocks
             for (i in 0 until messages.size) {
                 @Suppress("UNCHECKED_CAST")
-                val msg = messages[i] as? Map<String, Any> ?: continue
+                val msg = messages[i]
 
                 // Parse the agent/user role
                 val role = msg["role"]?.toString()?.uppercase() ?: "user"
@@ -253,7 +253,7 @@ class ChatHandler(
 
             contentBuilder.addPart(SystemInstruction(systemInstruction))
         } else {
-            Log.d(TAG, previewPrompt)
+            Log.d(TAG, previewPrompt.toString())
         }
 
         // Create a GenerateContentRequest
