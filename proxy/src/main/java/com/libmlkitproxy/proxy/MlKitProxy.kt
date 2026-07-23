@@ -9,13 +9,11 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import com.google.mlkit.common.MlKit
-import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.genai.common.GenAiException
-import com.google.mlkit.genai.prompt.Generation
-import com.google.mlkit.genai.prompt.GenerativeModel
 import com.libmlkitproxy.api.MlKitProxyInterface
+import com.libmlkitproxy.proxy.initializers.*
 import kotlinx.coroutines.*
 import kotlin.math.abs
 
@@ -31,8 +29,85 @@ class MLKitProxy : MlKitProxyInterface {
     // Create a background scope for the suspend functions
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
 
+    override fun initialize(context: Context) {
+        scope.launch {
+            try {
+                MlKit.initialize(context)
+                Log.i(TAG, "ML Kit initialized manually successfully")
+            } catch (e: Exception) {
+                Log.w(TAG, "ML Kit manual initialization exception: ${e.message}")
+                return@launch
+            }
+
+            val initializers =
+                listOf(
+                    PromptInit(),
+                    SpeechInit(),
+                )
+
+            var status: Int = FeatureStatus.AVAILABLE
+            for (initializer in initializers) {
+                val initStatus: Int = initializer.initialize(context)
+
+                when (initStatus) {
+                    FeatureStatus.AVAILABLE -> {
+                        // No-op
+                    }
+
+                    // Typically indicates AICore is downloading the model in the background
+                    FeatureStatus.DOWNLOADING -> {
+                        if (status != FeatureStatus.UNAVAILABLE) {
+                            status = FeatureStatus.DOWNLOADING
+                        }
+                    }
+
+                    // Typically indicates hardware incompatibility or another error
+                    FeatureStatus.UNAVAILABLE -> {
+                        status = FeatureStatus.UNAVAILABLE
+                    }
+
+                    else -> {
+                        Log.e(TAG, "Failed with an unknown initializer state: $status")
+                    }
+                }
+            }
+
+            // One or more models are downloading
+            when (status) {
+                FeatureStatus.AVAILABLE -> {
+                    // If everything initialized correctly, start the server
+                    val packageName = context.packageName
+
+                    startServer(context, packageName)
+                }
+
+                FeatureStatus.DOWNLOADING -> {
+                    val builder = AlertDialog.Builder(context)
+
+                    // Display an alert box with instructions
+                    builder.setTitle("libmlkit-proxy")
+                    builder.setMessage(
+                        "Downloading AI models in the background, please make sure you are " +
+                            "connected to Wi-Fi and have sufficient battery and storage available",
+                    )
+
+                    builder.setPositiveButton("OK") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+
+                    builder.show()
+                }
+
+                FeatureStatus.UNAVAILABLE -> {
+                    showToast(context, "MLKit is not available on this device")
+                }
+            }
+        }
+    }
+
     companion object {
         init {
+            // TODO Find a better workaround than lsposed
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                 try {
                     org.lsposed.hiddenapibypass.HiddenApiBypass
@@ -51,111 +126,6 @@ class MLKitProxy : MlKitProxyInterface {
         }
     }
 
-    override fun initialize(context: Context) {
-        try {
-            MlKit.initialize(context)
-            Log.i(TAG, "ML Kit initialized manually successfully")
-        } catch (e: Exception) {
-            Log.w(TAG, "ML Kit manual initialization exception: ${e.message}")
-        }
-
-        scope.launch {
-            var generativeModel: GenerativeModel? = null
-
-            try {
-                // Wait for MLKit to become available
-                generativeModel = Generation.getClient()
-
-                // Determine the MLKit enablement status
-                var status =
-                    try {
-                        generativeModel.checkStatus()
-                    } catch (e: GenAiException) {
-                        val FEATURE_UNAVAILABLE = 606
-                        val STRUCTURED_OUTPUT_NOT_SUPPORTED = 648
-
-                        // Allow silent failure if structured output is unavailable
-                        if (
-                            e.errorCode == FEATURE_UNAVAILABLE &&
-                            e.message?.contains(STRUCTURED_OUTPUT_NOT_SUPPORTED.toString()) == true
-                        ) {
-                            Log.w(TAG, "Structured output not supported, but proceeding anyway")
-
-                            // Default to downloadable to allow execution to continue
-                            FeatureStatus.AVAILABLE
-                        } else {
-                            throw e
-                        }
-                    }
-
-                // Trigger a model download if needed
-                if (status == FeatureStatus.DOWNLOADABLE) {
-                    Log.w(TAG, "ML Kit Model downloadable. Initiating background download...")
-                    showToast(context, "Downloading AI model in background...")
-
-                    generativeModel.download().collect { downloadStatus ->
-                        var totalBytes = 0L
-                        when (downloadStatus) {
-                            is DownloadStatus.DownloadStarted -> {
-                                totalBytes = downloadStatus.bytesToDownload
-                            }
-
-                            is DownloadStatus.DownloadProgress -> {
-                                val bytes = downloadStatus.totalBytesDownloaded
-
-                                if (totalBytes > 0) {
-                                    Log.i(TAG, "Download progress: ${bytes / totalBytes}%")
-                                } else {
-                                    Log.i(TAG, "Download progress: $bytes bytes")
-                                }
-                            }
-
-                            is DownloadStatus.DownloadCompleted -> {
-                                Log.i(TAG, "Download finished. Starting server...")
-                                status = FeatureStatus.AVAILABLE
-
-                                showToast(context, "Download complete")
-                            }
-
-                            is DownloadStatus.DownloadFailed -> {
-                                Log.e(TAG, "Model download failed. Cannot start server.")
-                            }
-                        }
-                    }
-                }
-
-                // Wait if the model was requested by another app or hasn't finished downloading
-                if (status == FeatureStatus.DOWNLOADING) {
-                    showToast(context, "Model is already downloading")
-
-                    while (generativeModel.checkStatus() == FeatureStatus.DOWNLOADING) {
-                        Log.w(TAG, "ML Kit Model download already in progress")
-                        delay(30000) // Poll every 30 seconds
-                    }
-
-                    status = FeatureStatus.AVAILABLE
-                }
-
-                if (status == FeatureStatus.AVAILABLE) {
-                    Log.i(TAG, "ML Kit is available, starting server...")
-
-                    val packageName = context.packageName
-                    startServer(context, packageName)
-                } else {
-                    showToast(context, "ML Kit not available on this device")
-                    Log.e(TAG, "ML Kit GenAI not available on this device. Status: $status")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to check ML Kit feature status", e)
-            } finally {
-                // Clean up resources if model check finishes
-                if (generativeModel != null) {
-                    generativeModel.close()
-                }
-            }
-        }
-    }
-
     private fun startServer(
         context: android.content.Context,
         packageName: String,
@@ -166,10 +136,10 @@ class MLKitProxy : MlKitProxyInterface {
         try {
             server?.serve()
 
-            Log.i(TAG, "Proxy server for $packageName started on port $port")
             showToast(context, "Listening on :$port")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start proxy server on port $port", e)
+
             showToast(context, "Failed to start server")
         }
     }
