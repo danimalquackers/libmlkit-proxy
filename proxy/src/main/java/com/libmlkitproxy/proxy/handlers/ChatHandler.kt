@@ -245,13 +245,13 @@ class ChatHandler(
         for (part in objects) {
             when (part) {
                 is String -> {
-                    contentBuilder.addPart(TextPart(part))
+                    contentBuilder.text(part)
 
                     previewPrompt.appendLine(part)
                 }
 
                 is Bitmap -> {
-                    contentBuilder.addPart(ImagePart(part.copy(part.config, true)))
+                    contentBuilder.image(part.copy(part.config, true))
                     hasBitmap = true
 
                     previewPrompt.appendLine("[Image]")
