@@ -10,11 +10,9 @@ import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerationConfig
-import com.google.mlkit.genai.prompt.ImagePart
-import com.google.mlkit.genai.prompt.Part
+import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.PromptPrefix
 import com.google.mlkit.genai.prompt.SystemInstruction
-import com.google.mlkit.genai.prompt.TextPart
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -53,11 +51,8 @@ class ChatHandler(
         val (systemInstruction, objects) = parseContent(messages) ?: return
 
         // Passthru generation parameters
-        var maxTokensOpt = body["max_tokens"] as? Int ?: 256
+        var maxTokensOpt = body["max_tokens"] as? Int ?: 4096
         val temperatureOpt = body["temperature"] as? Double ?: 0.0
-
-        // Clamp output tokens due to limited context window
-        maxTokensOpt = min(maxTokensOpt, 256)
 
         Log.i(TAG, "Preparing GenerateContentRequest for MLKit...")
 
@@ -88,19 +83,41 @@ class ChatHandler(
             val request = createRequest(parts)
 
             // Apply optional parameters
-            if (maxTokensOpt > 0) {
-                request.maxOutputTokens = maxTokensOpt
-            }
-            if (temperatureOpt >= 0) {
-                request.temperature = temperatureOpt.toFloat()
-            }
+            val remainingTokens = 4096 - tokenResponse.totalTokens
+            request.maxOutputTokens =
+                if (maxTokensOpt > 0) {
+                    min(maxTokensOpt, remainingTokens)
+                } else {
+                    remainingTokens
+                }
+            request.temperature =
+                if (temperatureOpt >= 0.0f && temperatureOpt <= 1.0f) {
+                    temperatureOpt.toFloat()
+                } else {
+                    0.0f
+                }
 
             // Execute inferencing
             Log.i(TAG, "Generating content response...")
             val result = generativeModel.generateContent(request.build())
+            val candidate = result.candidates.firstOrNull()
+
+            // Log the stop reason for debugging
+            when (candidate?.finishReason) {
+                // No-op for successful generation
+                Candidate.FinishReason.STOP -> {}
+
+                Candidate.FinishReason.MAX_TOKENS -> {
+                    Log.w(TAG, "Generation stopped due to response token exhaustion, response may be truncated")
+                }
+
+                Candidate.FinishReason.OTHER -> {
+                    Log.d(TAG, "Generation stopped for an unknown reason")
+                }
+            }
 
             // Calculate the number of response tokens
-            val generatedText = result.candidates.firstOrNull()?.text ?: ""
+            val generatedText = candidate?.text ?: ""
             val dummyRequest = createRequest(Pair(null, listOf(generatedText)))
             val dummyTokens = preflightRequest(dummyRequest)
 
